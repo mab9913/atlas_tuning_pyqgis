@@ -1,0 +1,48 @@
+# Get the active layer
+layer = iface.activeLayer()
+
+# Create a dictionary to store geometries for each label
+geometries = {}
+
+# Iterate over each feature in the layer
+for feature in layer.getFeatures():
+    # Get the value of the 'label' attribute
+    label = feature['label']
+    # Ensure there is a list for this label
+    geometries.setdefault(label, [])
+    # Add the geometry of this feature to the list for this label
+    geometries[label].append(feature.geometry().asPoint())
+
+# Create a new 'Polygon' memory layer
+mem_layer = QgsVectorLayer('Polygon?crs=epsg:4326', 'new_layer', 'memory')
+
+# Get the data provider of the layer
+mem_layer_dp = mem_layer.dataProvider()
+
+# Define fields for the new layer
+mem_layer_dp.addAttributes([QgsField('label', QVariant.String)])
+
+# Update the fields of the layer
+mem_layer.updateFields()
+
+# For each label, combine the geometries and add them to the new layer
+for label, geom_list in geometries.items():
+    # If there's only one point for this label, a polygon cannot be formed, so we skip it
+    if len(geom_list) < 3:  # Change this value to 2 if you want to allow polygons with 2 points
+        continue
+    
+    # Create a new feature
+    feature = QgsFeature()
+    # Set the 'label' attribute
+    feature.setAttributes([label])
+    # Create a "Convex Hull" for the list of points
+    combined_geom = QgsGeometry().fromMultiPointXY(geom_list).convexHull()
+    # Expand the geometry (the value depends on the CRS and units)
+    buffered_geom = combined_geom.buffer(0.000009, 8)  # Make sure to adjust this value according to your CRS
+    # Set the geometry of the feature
+    feature.setGeometry(buffered_geom)
+    # Add the feature to the memory layer
+    mem_layer_dp.addFeature(feature)
+
+# Add the memory layer to the project
+QgsProject.instance().addMapLayer(mem_layer)
